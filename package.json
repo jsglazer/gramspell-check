@@ -1,6 +1,6 @@
 {
 	"name": "gramspell-check",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Spelling, grammar and fact checking with Claude in an Obsidian sidebar pane",
 	"main": "main.js",
 	"scripts": {

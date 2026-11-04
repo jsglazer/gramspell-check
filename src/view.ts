@@ -23,6 +23,7 @@ import {
 	parseDictionary,
 } from './core/dictionary';
 import { markRange, planFixes, type ResolvedEdit } from './core/edits';
+import { findForbidden, parseForbidden } from './core/forbidden';
 import { runPool } from './core/pool';
 import {
 	buildCheckMessage,
@@ -33,6 +34,7 @@ import {
 	SCORES_SYSTEM,
 	type CheckOptions,
 } from './core/prompt';
+import { stripOutlineLines } from './core/outline';
 import { frontmatterRange } from './core/protect';
 import {
 	assignIds,
@@ -85,9 +87,10 @@ const KIND_TITLE: Record<IssueKind, string> = {
 	spelling: 'Spelling',
 	grammar: 'Grammar',
 	fact: 'Facts',
+	forbidden: 'Forbidden',
 };
 
-const KIND_ORDER: IssueKind[] = ['spelling', 'grammar', 'fact'];
+const KIND_ORDER: IssueKind[] = ['spelling', 'grammar', 'fact', 'forbidden'];
 
 /** Max requests in flight during one check. */
 const CONCURRENCY = 3;
@@ -274,7 +277,15 @@ export class GramspellView extends ItemView {
 			this.render();
 			return;
 		}
-		if (!s.checkSpelling && !s.checkGrammar && !s.checkFacts && !s.checkScores) {
+		const forbidden = parseForbidden(s.forbiddenWords);
+		const askForbidden = forbidden.filter((f) => f.replacement === null).map((f) => f.term);
+		if (
+			!s.checkSpelling &&
+			!s.checkGrammar &&
+			!s.checkFacts &&
+			!s.checkScores &&
+			forbidden.length === 0
+		) {
 			check.errors.push('All checks are turned off in settings.');
 			this.render();
 			return;
@@ -289,12 +300,14 @@ export class GramspellView extends ItemView {
 			...(s.checkSpelling ? (['spelling'] as const) : []),
 			...(s.checkGrammar ? (['grammar'] as const) : []),
 			...(factsInline ? (['facts'] as const) : []),
+			...(askForbidden.length ? (['forbidden'] as const) : []),
 		];
 		const opts: CheckOptions = {
 			variant: s.variant,
 			spelling: s.checkSpelling,
 			grammar: s.checkGrammar,
 			facts: factsInline,
+			forbidden: askForbidden,
 			dictionary: [...dict].sort(),
 			ignored: this.ignoredForPrompt(path),
 		};
@@ -307,6 +320,9 @@ export class GramspellView extends ItemView {
 				check.items.set(issue.id, { status: 'open', checked: true, message: null });
 			}
 		};
+
+		// Forbidden terms with a fixed replacement are found locally, before any request.
+		addIssues(findForbidden(text, forbidden));
 
 		const tasks: Array<() => Promise<void>> = [];
 		const label = (i: number): string => (partial ? ` (part ${i + 1}/${chunks.length})` : '');
@@ -374,10 +390,12 @@ export class GramspellView extends ItemView {
 	private async score(check: NoteCheck, key: string, text: string): Promise<void> {
 		const s = this.plugin.settings;
 		const fm = frontmatterRange(text);
-		const body = fm ? text.slice(fm.to) : text;
+		// Virtual-outliner entry lines (@, @@, … and @% comments) are structure, not prose: never score them.
+		const body = stripOutlineLines(fm ? text.slice(fm.to) : text);
 		check.scoring = true;
 		check.scoresError = null;
 		try {
+			if (body.trim() === '') throw new Error('There is no body text to score.');
 			const res = await callClaude({
 				apiKey: key,
 				model: s.model,
@@ -887,7 +905,7 @@ export class GramspellView extends ItemView {
 			st.checked = cb.checked;
 			this.updateApplyButton();
 		});
-		if (issue.kind === 'grammar' && issue.category)
+		if ((issue.kind === 'grammar' || issue.kind === 'forbidden') && issue.category)
 			head.createSpan({ cls: 'gramspell-tag', text: issue.category });
 		if (issue.kind === 'fact')
 			head.createSpan({

@@ -26,6 +26,7 @@ export const CHECK_SYSTEM = `${SHARED_RULES}
 What to report:
 - spelling: misspelled words, including real-word errors that are wrong in context (their/there/they're, its/it's, affect/effect, form/from, loose/lose, than/then, principal/principle, complement/compliment), wrong or missing hyphens in compound words where a dictionary requires them, and incorrect capitalisation of proper nouns. Do NOT flag proper nouns, technical terms, product names, foreign words used deliberately, or words in the author's dictionary.
 - grammar: errors a careful human editor would fix, judged at sentence and paragraph level: subject-verb agreement (including across long intervening phrases and with collective or indefinite subjects), pronoun-antecedent agreement and pronoun case, ambiguous or dangling pronoun references only when they make the sentence wrong, tense consistency within a paragraph, comma splices and run-on sentences, sentence fragments that are not deliberate list items or headings, dangling and misplaced modifiers, faulty parallelism (especially in lists and paired constructions), who/whom, that/which (restrictive clauses), fewer/less, apostrophes and possessives, articles (a/an/the), doubled or missing words, wrong prepositions, wrong verb forms, and punctuation (commas after introductory clauses and around non-restrictive clauses, semicolons, colons, quotation marks and parentheses). Give a short rule name in "category" (e.g. "Subject-verb agreement", "Comma splice").
+- forbidden (only when requested): every use of a word or phrase on the author's forbidden list (case-insensitive, any inflection, e.g. "utilize" also covers "utilized" and "utilizing"). "replacement" rewords the quote with the smallest change that avoids the forbidden term while keeping the meaning and grammar. "term" is the forbidden list entry that was used. Report every occurrence.
 - facts (only when requested): statements that are clearly and verifiably false: wrong dates, names, numbers, quantities, definitions, formulas, attributions, places or causal claims. Not opinions, predictions, judgement calls, simplifications that are acceptable in context, or claims you are unsure about. "replacement" corrects the statement with the smallest change. "confidence" is High when you are certain and Med when you are fairly sure; never report anything less certain.
 
 Return JSON matching the schema. Use empty arrays when there is nothing to report.`;
@@ -57,15 +58,24 @@ export interface CheckOptions {
 	spelling: boolean;
 	grammar: boolean;
 	facts: boolean;
+	/** Forbidden terms the model must find and reword (terms with a fixed replacement are handled locally). */
+	forbidden: string[];
 	dictionary: string[];
 	/** Fixes the author already rejected for this note ("quote → replacement"). */
 	ignored: string[];
 }
 
-function context(opts: Pick<CheckOptions, 'variant' | 'dictionary' | 'ignored'>): string {
+function context(
+	opts: Pick<CheckOptions, 'variant' | 'dictionary' | 'ignored'> & { forbidden?: string[] },
+): string {
 	const parts = [`Language: ${VARIANT_LABEL[opts.variant]} spelling and usage.`];
 	if (opts.dictionary.length) {
 		parts.push(`The author's dictionary (never flag these words):\n${opts.dictionary.join(', ')}`);
+	}
+	if (opts.forbidden?.length) {
+		parts.push(
+			`The author's forbidden list (report every use under "forbidden"):\n${opts.forbidden.join(', ')}`,
+		);
 	}
 	if (opts.ignored.length) {
 		parts.push(
@@ -85,6 +95,7 @@ export function buildCheckMessage(text: string, partial: boolean, opts: CheckOpt
 		opts.spelling ? 'spelling' : null,
 		opts.grammar ? 'grammar' : null,
 		opts.facts ? 'facts' : null,
+		opts.forbidden.length ? 'forbidden' : null,
 	].filter(Boolean);
 	return `${context(opts)}\n\nCheck for: ${wanted.join(', ')}.\n\n${noteBlock(text, partial)}`;
 }

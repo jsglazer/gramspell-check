@@ -8,12 +8,13 @@ An Obsidian plugin that checks a note for spelling, grammar and factual errors w
 - **Spelling** errors get a light-yellow background in the note. Real-word mistakes (*their/there*, *affect/effect*, *form/from*) are caught as well as typos. Proper nouns, technical terms and words in your dictionary are left alone.
 - **Grammar** errors get a red wavy underline. The checker works at sentence and paragraph level: agreement across long phrases, pronoun reference, tense consistency, comma splices, fragments, dangling modifiers, parallelism, who/whom, that/which, fewer/less, apostrophes, articles, doubled words and punctuation. Style preferences such as passive voice are not flagged.
 - **Facts** get a maroon underline. Claude verifies them with web search on reputable sources, skipping blocked sites, and each card links its source.
+- **Forbidden words** get a purple dotted underline. You list the words or phrases in settings. For `word => replacement` entries the plugin finds every use itself and offers the replacement, keeping the capitalisation; `word =>` deletes the word. For a word listed on its own, Claude suggests a minimal rewording in context.
 - It **only corrects**: it never adds content or rewrites for style, and each fix is the smallest change that makes the text correct.
 - Each problem is a card with a **pre-ticked Fix** checkbox, a red/green word diff, and an explanation. Click the diff to jump to the text. Hovering a card outlines its text in the note, and clicking a mark in the note scrolls to its card.
 - **Apply selected** applies every ticked fix in one change, so a single undo reverts all of them. Fixes in the same sentence are narrowed to the words they change, so they don't collide.
 - **Ignore** hides a fix and remembers it for that note. For spelling, **Add to dictionary** adds the word to your dictionary note.
 - Filter chips show or hide each kind of issue, both the cards and the marks in the note.
-- **Scores** at the bottom of the pane rate the note's Flow, Clarity and Reasoning from 1 to 100, each with a one-line reason. **Rescore** runs them again.
+- **Scores** at the bottom of the pane rate the note's Flow, Clarity and Reasoning from 1 to 100, each with a one-line reason. **Rescore** runs them again. Virtual-outliner entry lines (`@ …`, `@@ …`, `@@p …`) and `@%` comment lines are left out of the scoring.
 - **Stamp gramcheck** writes `gramcheck: YYYY-MM-DD HH:MM:SS` to the frontmatter, adding the field if it isn't there. By default the stamp is written automatically once nothing is left open.
 
 These are never checked or changed: frontmatter, code, math, URLs, link and embed targets (link aliases are checked), HTML tags, footnote keys, tags, block ids, `%%` comments, `JE: ` lines, and anything below a `DO NOT EDIT` heading.
@@ -29,8 +30,9 @@ Long notes are split at headings and checked in parallel, and results appear as 
 - **English variant**: US (default), UK, Canada or Australia.
 - **Dictionary note**: default `gramspell-check/Dictionary.md`, one word per line.
 - **Verify facts with web search** (on by default) and **Blocked sites** (default reddit.com, quora.com, pinterest.com, answers.com and fandom.com). With web search off, facts are checked from Claude's own knowledge.
+- **Forbidden words**: one per line, as `word`, `word => replacement` or `word =>`. Lines starting with `#` are ignored.
 - **Stamp automatically** (on by default).
-- **Highlight colours** for spelling, grammar and facts.
+- **Highlight colours** for spelling, grammar, facts and forbidden words.
 
 ## Development
 

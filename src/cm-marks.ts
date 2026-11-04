@@ -28,6 +28,7 @@ const CLASS: Record<IssueKind, string> = {
 	spelling: 'gramspell-mark-spelling',
 	grammar: 'gramspell-mark-grammar',
 	fact: 'gramspell-mark-fact',
+	forbidden: 'gramspell-mark-forbidden',
 };
 
 function build(state: MarkState, docLength: number): DecorationSet {

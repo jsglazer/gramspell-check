@@ -1,7 +1,7 @@
 {
 	"id": "gramspell-check",
 	"name": "Gramspell Check",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.11.4",
 	"description": "Check notes for spelling, grammar and factual errors with Claude: inline highlights, tick-to-apply fixes with diffs in a sidebar pane, flow/clarity/reasoning scores, and a gramcheck stamp.",
 	"author": "Josh Glazer",

@@ -111,3 +111,21 @@ describe('parseScores', () => {
 		expect(parseScores('{"flow": {"score": 5, "reason": "x"}}').ok).toBe(false);
 	});
 });
+
+describe('forbidden key', () => {
+	it('parses forbidden items and keeps the term as the category', () => {
+		const raw = JSON.stringify({
+			forbidden: [
+				{
+					quote: 'It is obviously true',
+					replacement: 'It is true',
+					term: 'obviously',
+					explanation: 'On your list.',
+				},
+			],
+		});
+		const r = parseCheck(raw, ['forbidden']);
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.value[0]).toMatchObject({ kind: 'forbidden', category: 'obviously' });
+	});
+});

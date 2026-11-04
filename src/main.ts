@@ -44,6 +44,7 @@ export default class GramspellPlugin extends Plugin {
 			'--gramspell-spelling': '',
 			'--gramspell-grammar': '',
 			'--gramspell-fact': '',
+			'--gramspell-forbidden': '',
 		});
 	}
 
@@ -56,6 +57,7 @@ export default class GramspellPlugin extends Plugin {
 			'--gramspell-spelling': s.colorSpelling,
 			'--gramspell-grammar': s.colorGrammar,
 			'--gramspell-fact': s.colorFact,
+			'--gramspell-forbidden': s.colorForbidden,
 		});
 	}
 
@@ -87,6 +89,7 @@ export default class GramspellPlugin extends Plugin {
 			...DEFAULT_SETTINGS,
 			...data,
 			blockedDomains: [...(data.blockedDomains ?? DEFAULT_SETTINGS.blockedDomains)],
+			forbiddenWords: [...(data.forbiddenWords ?? [])],
 			ignored: { ...(data.ignored ?? {}) },
 		};
 	}

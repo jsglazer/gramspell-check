@@ -20,6 +20,12 @@ const ITEM_SCHEMAS = {
 		required: ['quote', 'replacement', 'category', 'explanation'],
 		properties: { ...BASE_ITEM, category: { type: 'string' } },
 	},
+	forbidden: {
+		type: 'object',
+		additionalProperties: false,
+		required: ['quote', 'replacement', 'term', 'explanation'],
+		properties: { ...BASE_ITEM, term: { type: 'string' } },
+	},
 	facts: {
 		type: 'object',
 		additionalProperties: false,
@@ -28,12 +34,13 @@ const ITEM_SCHEMAS = {
 	},
 } as const;
 
-export type CheckKey = 'spelling' | 'grammar' | 'facts';
+export type CheckKey = 'spelling' | 'grammar' | 'facts' | 'forbidden';
 
 const KEY_KIND: Record<CheckKey, IssueKind> = {
 	spelling: 'spelling',
 	grammar: 'grammar',
 	facts: 'fact',
+	forbidden: 'forbidden',
 };
 
 /** JSON schema for a check call covering only the requested keys. */
@@ -95,7 +102,12 @@ function parseItems(data: Obj, key: CheckKey, withSource: boolean): RawIssue[] {
 			quote: str(item, 'quote', where),
 			replacement: str(item, 'replacement', where),
 			explanation: str(item, 'explanation', where),
-			category: key === 'grammar' ? str(item, 'category', where) : '',
+			category:
+				key === 'grammar'
+					? str(item, 'category', where)
+					: key === 'forbidden'
+						? str(item, 'term', where)
+						: '',
 			confidence,
 			sourceUrl: withSource ? str(item, 'source_url', where, true) : '',
 			sourceTitle: withSource ? str(item, 'source_title', where, true) : '',

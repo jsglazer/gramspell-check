@@ -19,9 +19,12 @@ export interface GramspellSettings {
 	/** Domains web search must never use, one per entry. */
 	blockedDomains: string[];
 	autoStamp: boolean;
+	/** Forbidden words or phrases, one per entry: `term` or `term => replacement`. */
+	forbiddenWords: string[];
 	colorSpelling: string;
 	colorGrammar: string;
 	colorFact: string;
+	colorForbidden: string;
 	/** Ignored-issue fingerprints per note path. */
 	ignored: Record<string, string[]>;
 }
@@ -47,9 +50,11 @@ export const DEFAULT_SETTINGS: GramspellSettings = {
 	webSearch: true,
 	blockedDomains: [...DEFAULT_BLOCKED_DOMAINS],
 	autoStamp: true,
+	forbiddenWords: [],
 	colorSpelling: '#fff3a3',
 	colorGrammar: '#e03131',
 	colorFact: '#800000',
+	colorForbidden: '#9c36b5',
 	ignored: {},
 };
 
@@ -187,6 +192,24 @@ export class GramspellSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		new Setting(containerEl)
+			.setName('Forbidden words')
+			.setDesc(
+				'Words or phrases you never want in your notes, one per line. Write "word => replacement" to fix every use automatically, or "word =>" to delete it; a word on its own is reworded by Claude in context. Lines starting with # are ignored.',
+			)
+			.addTextArea((t) => {
+				t.inputEl.rows = 6;
+				// eslint-disable-next-line obsidianmd/ui/sentence-case -- example list entries, not UI prose
+				t.setPlaceholder('utilize => use\nvery =>\nobviously');
+				t.setValue(s.forbiddenWords.join('\n')).onChange(async (value) => {
+					s.forbiddenWords = value
+						.split('\n')
+						.map((l) => l.trim())
+						.filter(Boolean);
+					await save();
+				});
+			});
+
 		new Setting(containerEl).setName('Fact checking').setHeading();
 		toggle(
 			'Verify facts with web search',
@@ -245,6 +268,11 @@ export class GramspellSettingTab extends PluginSettingTab {
 			'Fact underline',
 			() => s.colorFact,
 			(v) => (s.colorFact = v),
+		);
+		color(
+			'Forbidden word underline',
+			() => s.colorForbidden,
+			(v) => (s.colorForbidden = v),
 		);
 	}
 }

@@ -27,8 +27,13 @@ export function fingerprint(issue: Pick<RawIssue, 'kind' | 'quote' | 'replacemen
  */
 export function assignIds(existing: Issue[], incoming: RawIssue[]): Issue[] {
 	const seen = new Set(existing.map(fingerprint));
-	const prefix: Record<IssueKind, string> = { spelling: 's', grammar: 'g', fact: 'f' };
-	const count: Record<IssueKind, number> = { spelling: 0, grammar: 0, fact: 0 };
+	const prefix: Record<IssueKind, string> = {
+		spelling: 's',
+		grammar: 'g',
+		fact: 'f',
+		forbidden: 'w',
+	};
+	const count: Record<IssueKind, number> = { spelling: 0, grammar: 0, fact: 0, forbidden: 0 };
 	for (const e of existing) count[e.kind]++;
 	const out: Issue[] = [];
 	for (const raw of incoming) {
