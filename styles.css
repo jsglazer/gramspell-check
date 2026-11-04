@@ -189,6 +189,16 @@ body {
 	font-size: 0.9em;
 	cursor: pointer;
 }
+.gramspell-card.is-synced {
+	border-top-color: var(--interactive-accent);
+	border-right-color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+}
+.gramspell-kind {
+	font-size: 0.75em;
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+}
 .gramspell-tag {
 	font-size: 0.75em;
 	border-radius: var(--radius-s);
@@ -298,6 +308,31 @@ body {
 }
 .gramspell-scores-head h4 {
 	margin: 0;
+}
+.gramspell-scores-toggle {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	cursor: pointer;
+	flex: 1;
+	min-width: 0;
+}
+.gramspell-chevron {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+.gramspell-chevron svg {
+	width: 1em;
+	height: 1em;
+}
+.gramspell-scores-compact {
+	margin-left: var(--size-4-2);
+	font-size: 0.85em;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+.gramspell-scores.is-collapsed {
+	padding-bottom: var(--size-4-2);
 }
 .gramspell-score-top {
 	display: flex;

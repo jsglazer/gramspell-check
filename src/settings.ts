@@ -19,6 +19,11 @@ export interface GramspellSettings {
 	/** Domains web search must never use, one per entry. */
 	blockedDomains: string[];
 	autoStamp: boolean;
+	/** Keep the panel and the note scrolled to the same place. */
+	syncScroll: boolean;
+	/** Show cards in one list per kind instead of one list in note order. */
+	groupByKind: boolean;
+	scoresCollapsed: boolean;
 	/** Forbidden words or phrases, one per entry: `term` or `term => replacement`. */
 	forbiddenWords: string[];
 	colorSpelling: string;
@@ -50,6 +55,9 @@ export const DEFAULT_SETTINGS: GramspellSettings = {
 	webSearch: true,
 	blockedDomains: [...DEFAULT_BLOCKED_DOMAINS],
 	autoStamp: true,
+	syncScroll: true,
+	groupByKind: false,
+	scoresCollapsed: false,
 	forbiddenWords: [],
 	colorSpelling: '#fff3a3',
 	colorGrammar: '#e03131',
@@ -235,6 +243,23 @@ export class GramspellSettingTab extends PluginSettingTab {
 					await save();
 				});
 			});
+
+		new Setting(containerEl).setName('Panel').setHeading();
+		toggle(
+			'Keep panel and note aligned',
+			'Scrolling the note scrolls the panel to the issues you are looking at, and scrolling the panel scrolls the note.',
+			() => s.syncScroll,
+			(v) => (s.syncScroll = v),
+		);
+		toggle(
+			'Group cards by kind',
+			'Show spelling, grammar, facts and forbidden words as separate lists. Off shows one list in note order, which lines up best with the note.',
+			() => s.groupByKind,
+			(v) => {
+				s.groupByKind = v;
+				this.plugin.refreshViews();
+			},
+		);
 
 		new Setting(containerEl).setName('Stamp').setHeading();
 		toggle(

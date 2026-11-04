@@ -6,12 +6,22 @@ import {
 	MarkdownView,
 	normalizePath,
 	Notice,
+	setIcon,
 	TFile,
 	type Editor,
 	type WorkspaceLeaf,
 } from 'obsidian';
 import { callClaude, type CallResult } from './claude';
-import { markIdAt, setHoverMark, setIssueMarks, type MarkSpec } from './cm-marks';
+import {
+	editorScroller,
+	markIdAt,
+	scrollOffsetToTop,
+	setHoverMark,
+	setIssueMarks,
+	topVisibleOffset,
+	type MarkSpec,
+} from './cm-marks';
+import { cardAtNotePosition, type CardPos } from './core/sync';
 import { locateQuote } from './core/anchor';
 import { chunkNote } from './core/chunk';
 import { wordDiff } from './core/diff';
@@ -90,6 +100,14 @@ const KIND_TITLE: Record<IssueKind, string> = {
 	forbidden: 'Forbidden',
 };
 
+/** Singular label for a card's kind tag in the combined list. */
+const KIND_LABEL: Record<IssueKind, string> = {
+	spelling: 'Spelling',
+	grammar: 'Grammar',
+	fact: 'Fact',
+	forbidden: 'Forbidden',
+};
+
 const KIND_ORDER: IssueKind[] = ['spelling', 'grammar', 'fact', 'forbidden'];
 
 /** Max requests in flight during one check. */
@@ -103,6 +121,13 @@ export class GramspellView extends ItemView {
 	private renderedPath: string | null = null;
 	private applyBtn: HTMLButtonElement | null = null;
 	private hovered: string | null = null;
+	/** Scroll events on one side are ignored until these times, after we scrolled it ourselves. */
+	private ignorePanelUntil = 0;
+	private ignoreEditorUntil = 0;
+	private panelFrame: number | null = null;
+	private editorFrame: number | null = null;
+	/** Card currently aligned with the note. */
+	private synced: string | null = null;
 	private pending: Promise<void>[] = [];
 	/** Kinds hidden with the filter chips (cards and inline marks). */
 	private readonly hidden = new Set<IssueKind>();
@@ -146,6 +171,31 @@ export class GramspellView extends ItemView {
 			}),
 		);
 		this.registerDomEvent(this.contentEl, 'mouseleave', () => this.hover(null));
+		// Two-way scroll alignment between the panel and the note.
+		this.registerDomEvent(this.contentEl, 'scroll', () => {
+			if (!this.plugin.settings.syncScroll || Date.now() < this.ignorePanelUntil) return;
+			if (this.panelFrame !== null) return;
+			this.panelFrame = window.requestAnimationFrame(() => {
+				this.panelFrame = null;
+				this.alignNoteToPanel();
+			});
+		});
+		// Scroll events don't bubble, so listen in the capture phase and keep only the note's editor.
+		this.registerDomEvent(
+			activeDocument,
+			'scroll',
+			(evt) => {
+				if (!this.plugin.settings.syncScroll || Date.now() < this.ignoreEditorUntil) return;
+				const editor = this.editor();
+				if (!editor || evt.target !== editorScroller(editor)) return;
+				if (this.editorFrame !== null) return;
+				this.editorFrame = window.requestAnimationFrame(() => {
+					this.editorFrame = null;
+					this.alignPanelToNote();
+				});
+			},
+			{ capture: true },
+		);
 		// Clicking an inline mark in the editor scrolls the panel to its card.
 		this.registerDomEvent(activeDocument, 'click', (evt) => {
 			const id = markIdAt(evt.target);
@@ -158,6 +208,8 @@ export class GramspellView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.rerenderSoon.cancel();
+		if (this.panelFrame !== null) window.cancelAnimationFrame(this.panelFrame);
+		if (this.editorFrame !== null) window.cancelAnimationFrame(this.editorFrame);
 		this.hover(null);
 		if (this.renderScope) this.removeChild(this.renderScope);
 		this.renderScope = null;
@@ -647,6 +699,54 @@ export class GramspellView extends ItemView {
 		if (this.hovered && !marks.some((m) => m.id === this.hovered)) this.hover(null);
 	}
 
+	// ---- scroll alignment ----------------------------------------------------
+
+	private cards(): HTMLElement[] {
+		return this.body
+			? Array.from(this.body.querySelectorAll<HTMLElement>('.gramspell-card[data-from]'))
+			: [];
+	}
+
+	private markSynced(id: string | null): void {
+		this.synced = id;
+		for (const c of this.cards()) c.toggleClass('is-synced', c.getAttribute('data-id') === id);
+	}
+
+	/** Panel scrolled: bring the note to the card at the top of the panel. */
+	private alignNoteToPanel(): void {
+		const editor = this.editor();
+		if (!editor) return;
+		const top = this.contentEl.getBoundingClientRect().top;
+		const card = this.cards().find((c) => c.getBoundingClientRect().bottom > top + 12);
+		if (!card) return;
+		const id = card.getAttribute('data-id');
+		if (id === this.synced) return;
+		this.markSynced(id);
+		this.ignoreEditorUntil = Date.now() + 250;
+		scrollOffsetToTop(editor, Number(card.getAttribute('data-from')));
+	}
+
+	/** Note scrolled: bring the panel to the first issue at the top of the note. */
+	private alignPanelToNote(): void {
+		const editor = this.editor();
+		if (!editor) return;
+		const top = topVisibleOffset(editor);
+		if (top === null) return;
+		const cards = this.cards();
+		const positions: CardPos[] = cards.map((c) => ({
+			id: c.getAttribute('data-id') ?? '',
+			from: Number(c.getAttribute('data-from')),
+			to: Number(c.getAttribute('data-to')),
+		}));
+		const id = cardAtNotePosition(positions, top);
+		const card = cards.find((c) => c.getAttribute('data-id') === id);
+		if (!card || id === this.synced) return;
+		this.markSynced(id);
+		this.ignorePanelUntil = Date.now() + 250;
+		const delta = card.getBoundingClientRect().top - this.contentEl.getBoundingClientRect().top;
+		this.contentEl.scrollTop += delta - 8;
+	}
+
 	// ---- rendering ---------------------------------------------------------
 
 	private md(el: HTMLElement, markdown: string): void {
@@ -675,10 +775,14 @@ export class GramspellView extends ItemView {
 		const text = this.editor()?.getValue() ?? null;
 		this.build(root, text);
 		this.updateMarks(this.check(), text);
+		// Restoring the panel's own scroll position must not move the note.
+		this.ignorePanelUntil = Date.now() + 300;
 		scroller.scrollTop = prevTop;
 		const pending = this.pending;
 		void Promise.allSettled(pending).then(() => {
 			if (this.body !== root) return;
+			// Restoring the panel's own scroll position must not move the note.
+			this.ignorePanelUntil = Date.now() + 300;
 			scroller.scrollTop = prevTop;
 			root.setCssProps({ '--gramspell-hold-height': '0px' });
 		});
@@ -749,16 +853,11 @@ export class GramspellView extends ItemView {
 			return null;
 		};
 
-		for (const kind of KIND_ORDER) {
-			if (this.hidden.has(kind)) continue;
-			const list = this.ordered(
-				open.filter((i) => i.kind === kind),
-				text,
-			);
-			if (!list.length) continue;
+		const section = (title: string, list: Issue[], showKind: boolean): void => {
+			if (!list.length) return;
 			const sec = root.createDiv({ cls: 'gramspell-section' });
 			const h = sec.createDiv({ cls: 'gramspell-section-head' });
-			h.createEl('h4', { text: `${KIND_TITLE[kind]} (${list.length})` });
+			h.createEl('h4', { text: `${title} (${list.length})` });
 			const all = list.every((i) => check.items.get(i.id)?.checked);
 			const toggleAll = h.createEl('a', {
 				cls: 'gramspell-link',
@@ -771,7 +870,22 @@ export class GramspellView extends ItemView {
 				}
 				this.render();
 			});
-			for (const issue of list) this.renderCard(sec, issue, check, anchorNote(issue));
+			for (const issue of list)
+				this.renderCard(sec, issue, check, anchorNote(issue), text, showKind);
+		};
+		const visible = open.filter((i) => !this.hidden.has(i.kind));
+		if (this.plugin.settings.groupByKind) {
+			for (const kind of KIND_ORDER)
+				section(
+					KIND_TITLE[kind],
+					this.ordered(
+						visible.filter((i) => i.kind === kind),
+						text,
+					),
+					false,
+				);
+		} else {
+			section('Issues', this.ordered(visible, text), true);
 		}
 
 		if (check.finished && open.length === 0 && check.errors.length === 0) {
@@ -812,12 +926,47 @@ export class GramspellView extends ItemView {
 	}
 
 	private renderScores(root: HTMLElement, check: NoteCheck): void {
-		const strip = root.createDiv({ cls: 'gramspell-scores' });
+		const collapsed = this.plugin.settings.scoresCollapsed;
+		const strip = root.createDiv({ cls: `gramspell-scores${collapsed ? ' is-collapsed' : ''}` });
 		const head = strip.createDiv({ cls: 'gramspell-scores-head' });
-		head.createEl('h4', { text: 'Scores' });
+		const toggle = head.createDiv({
+			cls: 'gramspell-scores-toggle',
+			attr: {
+				role: 'button',
+				tabindex: '0',
+				'aria-expanded': String(!collapsed),
+				'aria-label': collapsed ? 'Expand scores' : 'Collapse scores',
+			},
+		});
+		setIcon(
+			toggle.createSpan({ cls: 'gramspell-chevron' }),
+			collapsed ? 'chevron-right' : 'chevron-down',
+		);
+		toggle.createEl('h4', { text: 'Scores' });
+		if (collapsed && check.scores) {
+			const sc = check.scores;
+			toggle.createSpan({
+				cls: 'gramspell-scores-compact',
+				text: `${sc.flow.score} · ${sc.clarity.score} · ${sc.reasoning.score}`,
+				attr: { title: 'Flow · Clarity · Reasoning' },
+			});
+		}
+		const flip = async (): Promise<void> => {
+			this.plugin.settings.scoresCollapsed = !collapsed;
+			await this.plugin.saveSettings();
+			this.render();
+		};
+		toggle.addEventListener('click', () => void flip());
+		toggle.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				void flip();
+			}
+		});
 		const btn = head.createEl('button', { text: check.scoring ? 'Scoring…' : 'Rescore' });
 		btn.disabled = check.scoring || check.busy;
 		btn.addEventListener('click', () => void this.rescore());
+		if (collapsed) return;
 		if (check.scoresError) strip.createDiv({ cls: 'gramspell-error', text: check.scoresError });
 		if (!check.scores) {
 			if (!check.scoring && !check.scoresError)
@@ -886,13 +1035,21 @@ export class GramspellView extends ItemView {
 		issue: Issue,
 		check: NoteCheck,
 		anchor: string | null,
+		text: string | null,
+		showKind: boolean,
 	): void {
 		const st = check.items.get(issue.id);
 		if (!st) return;
 		const card = parent.createDiv({
-			cls: `gramspell-card gramspell-card-${issue.kind}`,
+			cls: `gramspell-card gramspell-card-${issue.kind}${issue.id === this.synced ? ' is-synced' : ''}`,
 			attr: { 'data-id': issue.id },
 		});
+		// Where the card's text sits in the note, for keeping the panel and note aligned.
+		const range = text === null ? null : markRange(text, issue);
+		if (range) {
+			card.setAttr('data-from', String(range.from));
+			card.setAttr('data-to', String(range.to));
+		}
 		this.wireHover(card, issue.id);
 
 		const head = card.createDiv({ cls: 'gramspell-card-head' });
@@ -905,6 +1062,11 @@ export class GramspellView extends ItemView {
 			st.checked = cb.checked;
 			this.updateApplyButton();
 		});
+		if (showKind)
+			head.createSpan({
+				cls: `gramspell-kind gramspell-kind-${issue.kind}`,
+				text: KIND_LABEL[issue.kind],
+			});
 		if ((issue.kind === 'grammar' || issue.kind === 'forbidden') && issue.category)
 			head.createSpan({ cls: 'gramspell-tag', text: issue.category });
 		if (issue.kind === 'fact')

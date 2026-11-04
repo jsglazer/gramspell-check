@@ -101,3 +101,25 @@ export function markIdAt(target: EventTarget | null): string | null {
 	if (!(target instanceof HTMLElement)) return null;
 	return target.closest('[data-gramspell-id]')?.getAttribute('data-gramspell-id') ?? null;
 }
+
+/** The editor's scrolling element (for matching scroll events), if it is a CodeMirror editor. */
+export function editorScroller(editor: Editor): HTMLElement | null {
+	return viewOf(editor)?.scrollDOM ?? null;
+}
+
+/** Document offset of the first character visible at the top of the editor. */
+export function topVisibleOffset(editor: Editor): number | null {
+	const view = viewOf(editor);
+	if (!view) return null;
+	const rect = view.scrollDOM.getBoundingClientRect();
+	const block = view.lineBlockAtHeight(rect.top - view.documentTop + 4);
+	return block.from;
+}
+
+/** Scroll the editor so the line holding `pos` sits near the top, without moving the cursor. */
+export function scrollOffsetToTop(editor: Editor, pos: number): void {
+	const view = viewOf(editor);
+	if (!view) return;
+	const at = Math.max(0, Math.min(pos, view.state.doc.length));
+	view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'start', yMargin: 24 }) });
+}

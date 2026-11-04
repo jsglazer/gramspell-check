@@ -48,6 +48,13 @@ export default class GramspellPlugin extends Plugin {
 		});
 	}
 
+	/** Re-render open panes after a display setting changes. */
+	refreshViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_GRAMSPELL)) {
+			if (leaf.view instanceof GramspellView) leaf.view.render();
+		}
+	}
+
 	/** Expose the highlight colours as CSS variables used by styles.css. */
 	applyColors(): void {
 		const s = this.settings;

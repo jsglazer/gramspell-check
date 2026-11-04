@@ -13,8 +13,9 @@ An Obsidian plugin that checks a note for spelling, grammar and factual errors w
 - Each problem is a card with a **pre-ticked Fix** checkbox, a red/green word diff, and an explanation. Click the diff to jump to the text. Hovering a card outlines its text in the note, and clicking a mark in the note scrolls to its card.
 - **Apply selected** applies every ticked fix in one change, so a single undo reverts all of them. Fixes in the same sentence are narrowed to the words they change, so they don't collide.
 - **Ignore** hides a fix and remembers it for that note. For spelling, **Add to dictionary** adds the word to your dictionary note.
+- Cards are one list in **note order**, each tagged with its kind; a setting groups them by kind instead. The panel and the note **stay aligned**: scrolling the note brings the panel to the first issue at the top of the note, and scrolling the panel brings the note to the card at the top of the panel. The aligned card gets an accent border.
 - Filter chips show or hide each kind of issue, both the cards and the marks in the note.
-- **Scores** at the bottom of the pane rate the note's Flow, Clarity and Reasoning from 1 to 100, each with a one-line reason. **Rescore** runs them again. Virtual-outliner entry lines (`@ …`, `@@ …`, `@@p …`) and `@%` comment lines are left out of the scoring.
+- **Scores** at the bottom of the pane rate the note's Flow, Clarity and Reasoning from 1 to 100, each with a one-line reason. **Rescore** runs them again. The arrow beside **Scores** collapses the section to one line (Flow · Clarity · Reasoning), and the choice is remembered. Virtual-outliner entry lines (`@ …`, `@@ …`, `@@p …`) and `@%` comment lines are left out of the scoring.
 - **Stamp gramcheck** writes `gramcheck: YYYY-MM-DD HH:MM:SS` to the frontmatter, adding the field if it isn't there. By default the stamp is written automatically once nothing is left open.
 
 These are never checked or changed: frontmatter, code, math, URLs, link and embed targets (link aliases are checked), HTML tags, footnote keys, tags, block ids, `%%` comments, `JE: ` lines, and anything below a `DO NOT EDIT` heading.
@@ -31,6 +32,7 @@ Long notes are split at headings and checked in parallel, and results appear as 
 - **Dictionary note**: default `gramspell-check/Dictionary.md`, one word per line.
 - **Verify facts with web search** (on by default) and **Blocked sites** (default reddit.com, quora.com, pinterest.com, answers.com and fandom.com). With web search off, facts are checked from Claude's own knowledge.
 - **Forbidden words**: one per line, as `word`, `word => replacement` or `word =>`. Lines starting with `#` are ignored.
+- **Keep panel and note aligned** (on by default) and **Group cards by kind** (off by default).
 - **Stamp automatically** (on by default).
 - **Highlight colours** for spelling, grammar, facts and forbidden words.
 
