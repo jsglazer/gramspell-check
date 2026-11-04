@@ -73,6 +73,7 @@ body {
 .gramspell-mark.is-hover {
 	outline: 2px solid var(--interactive-accent);
 	outline-offset: 1px;
+	background-color: color-mix(in srgb, var(--interactive-accent) 22%, transparent);
 }
 
 /* ---- side panel --------------------------------------------------------- */
@@ -175,8 +176,27 @@ body {
 .gramspell-card:hover {
 	background: var(--background-modifier-hover);
 }
+.gramspell-card {
+	cursor: pointer;
+}
+.gramspell-card.is-hover {
+	background: var(--background-modifier-hover);
+	border-top-color: var(--interactive-accent);
+	border-right-color: var(--interactive-accent);
+	border-bottom-color: var(--interactive-accent);
+}
 .gramspell-card.is-flash {
-	background: var(--background-modifier-active-hover);
+	animation: gramspell-flash 1.2s ease-out;
+}
+@keyframes gramspell-flash {
+	0%,
+	40% {
+		box-shadow: 0 0 0 3px var(--interactive-accent);
+		background: var(--background-modifier-active-hover);
+	}
+	100% {
+		box-shadow: 0 0 0 0 transparent;
+	}
 }
 .gramspell-card-head,
 .gramspell-actions {

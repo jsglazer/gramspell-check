@@ -126,6 +126,9 @@ export class GramspellView extends ItemView {
 	private ignoreEditorUntil = 0;
 	private panelFrame: number | null = null;
 	private editorFrame: number | null = null;
+	private flashTimer: number | null = null;
+	/** Issue whose mark is under the pointer in the note. */
+	private editorHover: string | null = null;
 	/** Card currently aligned with the note. */
 	private synced: string | null = null;
 	private pending: Promise<void>[] = [];
@@ -203,12 +206,26 @@ export class GramspellView extends ItemView {
 			if (id && mv && evt.target instanceof Node && mv.containerEl.contains(evt.target))
 				this.focusCard(id);
 		});
+		// Pointer over a mark in the note highlights its card (and outlines the mark).
+		this.registerDomEvent(activeDocument, 'mouseover', (evt) => {
+			const mv = this.markdownView();
+			if (!mv || !(evt.target instanceof Node) || !mv.containerEl.contains(evt.target)) return;
+			const id = markIdAt(evt.target);
+			if (id) {
+				this.editorHover = id;
+				this.hover(id);
+			} else if (this.editorHover) {
+				if (this.hovered === this.editorHover) this.hover(null);
+				this.editorHover = null;
+			}
+		});
 		this.followActive();
 	}
 
 	async onClose(): Promise<void> {
 		this.rerenderSoon.cancel();
 		if (this.panelFrame !== null) window.cancelAnimationFrame(this.panelFrame);
+		if (this.flashTimer !== null) window.clearTimeout(this.flashTimer);
 		if (this.editorFrame !== null) window.cancelAnimationFrame(this.editorFrame);
 		this.hover(null);
 		if (this.renderScope) this.removeChild(this.renderScope);
@@ -644,32 +661,69 @@ export class GramspellView extends ItemView {
 		const to = mv.editor.offsetToPos(loc.range.to);
 		mv.editor.setCursor(from);
 		mv.editor.scrollIntoView({ from, to }, true);
+		this.flash(issue.id);
 	}
 
 	/** Outline an issue's mark in the note (null clears). */
+	/**
+	 * Highlight one issue on both sides (outline on its mark in the note, accent on
+	 * its card), or clear with null. Hover is transient: whatever set it clears it.
+	 */
 	private hover(id: string | null): void {
 		if (id === this.hovered) return;
 		this.hovered = id;
 		const editor = this.editor();
 		if (editor) setHoverMark(editor, id);
+		for (const c of this.allCards()) c.toggleClass('is-hover', c.getAttribute('data-id') === id);
 	}
 
-	private wireHover(card: HTMLElement, id: string): void {
-		card.addEventListener('mouseenter', () => this.hover(id));
-		card.addEventListener('focusin', () => this.hover(id));
-		card.addEventListener('pointerdown', () => this.hover(id));
+	private allCards(): HTMLElement[] {
+		return this.body ? Array.from(this.body.querySelectorAll<HTMLElement>('.gramspell-card')) : [];
 	}
 
-	/** Scroll the panel to a card and flash it. */
-	private focusCard(id: string): void {
-		const card = this.body?.querySelector<HTMLElement>(
-			`.gramspell-card[data-id="${CSS.escape(id)}"]`,
+	private cardEl(id: string): HTMLElement | null {
+		return (
+			this.body?.querySelector<HTMLElement>(`.gramspell-card[data-id="${CSS.escape(id)}"]`) ?? null
 		);
-		if (!card) return;
-		card.scrollIntoView({ block: 'center', behavior: 'smooth' });
-		card.addClass('is-flash');
-		window.setTimeout(() => card.removeClass('is-flash'), 1200);
+	}
+
+	/** Briefly highlight an issue on both sides, then clear it (unless the pointer took over). */
+	private flash(id: string): void {
+		if (this.flashTimer !== null) window.clearTimeout(this.flashTimer);
 		this.hover(id);
+		const card = this.cardEl(id);
+		if (card) {
+			card.removeClass('is-flash');
+			void card.offsetWidth; // restart the CSS animation
+			card.addClass('is-flash');
+		}
+		this.flashTimer = window.setTimeout(() => {
+			this.flashTimer = null;
+			this.cardEl(id)?.removeClass('is-flash');
+			if (this.hovered === id && !this.cardEl(id)?.matches(':hover')) this.hover(null);
+		}, 1400);
+	}
+
+	private wireCard(card: HTMLElement, issue: Issue): void {
+		card.addEventListener('mouseenter', () => this.hover(issue.id));
+		card.addEventListener('mouseleave', () => {
+			if (this.hovered === issue.id) this.hover(null);
+		});
+		// Clicking anywhere on the card (except its controls) jumps to the text in the note.
+		card.addEventListener('click', (evt) => {
+			const t = evt.target;
+			if (t instanceof Element && t.closest('input, button, a, label, textarea, select')) return;
+			this.jumpTo(issue);
+		});
+	}
+
+	/** A mark in the note was clicked: bring its card into view and flash both. */
+	private focusCard(id: string): void {
+		const card = this.cardEl(id);
+		if (!card) return;
+		this.ignorePanelUntil = Date.now() + 600;
+		card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		this.flash(id);
 	}
 
 	/** Issues sorted by position in `text`; unplaceable ones last. */
@@ -1014,7 +1068,6 @@ export class GramspellView extends ItemView {
 
 	private renderDiff(parent: HTMLElement, issue: Issue): void {
 		const box = parent.createDiv({ cls: 'gramspell-diff', attr: { title: 'Jump to this text' } });
-		box.addEventListener('click', () => this.jumpTo(issue));
 		// Quotes with math render as before/after Markdown so equations display.
 		const hasMath = /(^|[^\\])\$/.test(issue.quote);
 		if (hasMath) {
@@ -1041,7 +1094,7 @@ export class GramspellView extends ItemView {
 		const st = check.items.get(issue.id);
 		if (!st) return;
 		const card = parent.createDiv({
-			cls: `gramspell-card gramspell-card-${issue.kind}${issue.id === this.synced ? ' is-synced' : ''}`,
+			cls: `gramspell-card gramspell-card-${issue.kind}${issue.id === this.synced ? ' is-synced' : ''}${issue.id === this.hovered ? ' is-hover' : ''}`,
 			attr: { 'data-id': issue.id },
 		});
 		// Where the card's text sits in the note, for keeping the panel and note aligned.
@@ -1050,7 +1103,7 @@ export class GramspellView extends ItemView {
 			card.setAttr('data-from', String(range.from));
 			card.setAttr('data-to', String(range.to));
 		}
-		this.wireHover(card, issue.id);
+		this.wireCard(card, issue);
 
 		const head = card.createDiv({ cls: 'gramspell-card-head' });
 		const tick = head.createEl('label', { cls: 'gramspell-tick' });
