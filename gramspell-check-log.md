@@ -48,3 +48,30 @@ Both are in 1.0.2, which is installed and running in VaultSchar (pushed as `f93f
 2. **Scores collapse.** Click the arrow next to **Scores** to fold it to one line showing the three numbers (Flow · Clarity · Reasoning). Click again to expand. It remembers your choice.
 
 I checked that the plugin reads the top of your open note correctly. I haven't seen the alignment run against a real check yet, because there was no check open. Run one and scroll both ways; if it feels jumpy or lags, tell me and I'll tune it.
+
+## 2026-11-03 21:20 — v1.0.3: hover and click work with a single issue
+
+**Prompt:** "neither hover nor click work when there is only 1 item in the fix list"
+
+**Diagnosis:** I inspected the live panel on TheoryHypo.md (one grammar card, g1). The panel's hover state was stuck on g1: it was set by focus, by pointerdown, or by clicking the mark in the note, and it only cleared when the pointer left the whole panel. With the outline already permanently on, hovering the only card changed nothing. Clicking a mark scrolled the panel to its card and tinted it faintly, and with one card no scroll was needed, so nothing visible happened. With several cards the movement between them hid both problems. Only the diff line jumped to the text; the rest of the card did nothing.
+
+**Changes:** Version 1.0.2 → 1.0.3. Lint clean, 74/74 tests pass, build OK. Commit `cd23502` pushed. Deployed to VaultSchar and reloaded (the one check in memory had nothing open). Disabling the plugin closed its panel, so I reopened it. **Verified in the live app** with a temporary one-issue check on TheoryHypo.md (removed afterwards, cursor restored): card hover on/off ✓, click on the card body jumps to the text and flashes the card and mark ✓, hovering the mark highlights the card and leaving it clears ✓, clicking the mark flashes the card ✓.
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | Hover highlight could stick on, so with one card hovering showed no change | Hover is transient and two-way. A card's `mouseenter`/`mouseleave` outlines and clears its mark and gives the card an accent `is-hover` style. A pointer over a mark in the note (document `mouseover`, filtered to this note's editor) highlights its card, and moving off clears it. The sticky `focusin`/`pointerdown` triggers are gone. The hover state survives re-renders |
+| 2 | Clicking gave no visible response when no scrolling was needed | `flash(id)` pulses the card (accent ring animation) and outlines plus tints the mark for ~1.4 s, then clears unless the pointer is still on the card. Used when jumping from a card and when clicking a mark (`scrollIntoView` now uses `nearest`, with the panel→note sync paused during the smooth scroll) |
+| 3 | Only the diff line was clickable | Clicking anywhere on a card jumps to its text, except on the checkbox, buttons and links |
+
+### Summary
+
+Fixed in 1.0.3, which is installed and running in VaultSchar (pushed as `cd23502`).
+
+The cause was the panel's "hovered" item getting stuck on. Clicking the mark in the note, or clicking into the card, set it, and only moving the mouse out of the whole panel cleared it. With a single card the outline was already on, so hovering looked dead. Clicking a mark only scrolled the panel and tinted the card faintly, and with one card there was nothing to scroll, so nothing seemed to happen. With several cards the movement between them hid it.
+
+Now:
+- **Hover works both ways:** hover a card and its text in the note gets an outline and tint. Hover the underlined text in the note and its card lights up. Moving away clears both.
+- **Click anywhere on a card** (not just the diff) to jump to the text. The card pulses and the text in the note flashes, so you always see where you landed.
+- **Clicking the underlined text in the note** brings its card into view and pulses it, even when it's the only one.
+
+I tested all of these in your vault with a temporary one-issue check on TheoryHypo, then removed it and put your cursor back. Reloading the plugin closed its panel, so I reopened it.
