@@ -75,3 +75,26 @@ Now:
 - **Clicking the underlined text in the note** brings its card into view and pulses it, even when it's the only one.
 
 I tested all of these in your vault with a temporary one-issue check on TheoryHypo, then removed it and put your cursor back. Reloading the plugin closed its panel, so I reopened it.
+
+## 2026-11-04 — v1.0.4: your own fix on every card; scoring question answered
+
+**Prompt:**
+- "add text box under each error when I can provide my own fix"
+- "is the scoring ignoring virtual-outline's "@" lines? it needs to ignore the entire lines, not just the symbols"
+
+**Scoring answer (no change needed):** yes, whole lines. Since 1.0.1, `stripOutlineLines` drops every line whose first non-space characters are one or more `@` (optionally `p` or `%`) followed by a space. The entire line goes, heading text included, before the note is sent for scoring. All 61 `@` lines in TheoryHypo.md match that rule. TheoryHypo's current scores (52 · 55 · 58) were made before 1.0.1, so **Rescore** is needed to see scores without the outline lines.
+
+**Changes:** Version 1.0.3 → 1.0.4. Lint clean, 74/74 tests pass, build OK. Commits `b15f7b3` and `9da16fa` pushed. Deployed to VaultSchar and reloaded, with the panel reopened. **Verified in the live app** with a temporary one-issue check on "0.1.1 Handi.md", nothing applied and the note unchanged: clicking the empty box fills it with Claude's suggestion, all selected ✓; typing sets the fix, ticks the card, updates the diff, shows "Using your fix" and counts in Apply selected ✓; a re-render while typing keeps focus and selection ✓; **Use Claude's suggestion** resets ✓.
+
+| # | Issue | Fix |
+|---|---|---|
+| 1 | No way to give your own fix | Each card has a text box under the explanation. Clicking or focusing an empty box fills it with Claude's suggestion, all selected (type over it, or use the arrow keys to edit). Whatever is typed becomes the replacement for the whole quoted passage (`ItemState.custom`, applied through `effective()`): the diff updates in place, the card ticks itself, the Apply count updates, and the inline mark and the Handled list use it. Apply goes through the same `planFixes` validation (protected text, overlap, no-op). "Using your fix · Use Claude's suggestion" shows under the box; the link reverts. Leaving the box unchanged keeps Claude's fix. Clicks in the box don't trigger the card's jump |
+| 2 | A background re-render (editor change, results arriving) would have taken the cursor out of the box | `render()` records the focused own-fix box and its selection before clearing the panel, and restores focus (`preventScroll`) and the selection afterwards |
+
+### Summary
+
+The text box is in 1.0.4, which is installed and running in VaultSchar (pushed as `9da16fa`).
+
+**Your own fix:** every card now has a text box under the explanation. Click into it and it fills with Claude's suggestion, already selected, so you can type over it or edit it. As you type, the red/green diff shows your version and the card ticks itself, and **Apply selected** uses your text. "Using your fix · **Use Claude's suggestion**" appears under the box, and the link switches back. Your fix is replaced into the note under the same rules as Claude's: it's refused if it would touch code, math, links or other protected text. I tested it in your vault with a temporary card on "0.1.1 Handi" (nothing applied, note unchanged), including that a panel refresh while you're typing doesn't kick you out of the box.
+
+**Scoring:** yes, it drops the entire `@` lines, heading text and all, not just the symbols. Every one of the 61 `@` lines in TheoryHypo matches the rule. The TheoryHypo scores you have now (52 · 55 · 58) were made before that change, so click **Rescore** to see them without the outline lines.
