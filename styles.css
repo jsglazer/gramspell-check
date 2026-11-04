@@ -400,3 +400,26 @@ body {
 .gramspell-scroller > .gramspell {
 	flex: 1 0 auto;
 }
+
+/* ---- the author's own fix ------------------------------------------- */
+
+.gramspell-own {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.gramspell-own-input {
+	width: 100%;
+	min-height: 2.4em;
+	resize: vertical;
+	font-size: 0.9em;
+	font-family: var(--font-text);
+	cursor: text;
+}
+.gramspell-own-note {
+	font-size: 0.8em;
+	color: var(--text-muted);
+}
+.gramspell-own-note:empty {
+	display: none;
+}

@@ -73,6 +73,8 @@ interface ItemState {
 	status: ItemStatus;
 	checked: boolean;
 	message: string | null;
+	/** The author's own replacement for the quote, overriding Claude's; null uses Claude's. */
+	custom: string | null;
 }
 
 /** Check state for one note, kept for the session so the pane survives note switches. */
@@ -386,7 +388,12 @@ export class GramspellView extends ItemView {
 			const fresh = filterByDictionary(raw, dict).filter((i) => !ignored.has(fingerprint(i)));
 			for (const issue of assignIds(check.issues, fresh)) {
 				check.issues.push(issue);
-				check.items.set(issue.id, { status: 'open', checked: true, message: null });
+				check.items.set(issue.id, {
+					status: 'open',
+					checked: true,
+					message: null,
+					custom: null,
+				});
 			}
 		};
 
@@ -537,7 +544,10 @@ export class GramspellView extends ItemView {
 			new Notice('Nothing is ticked.');
 			return;
 		}
-		const plan = planFixes(text, ticked);
+		const plan = planFixes(
+			text,
+			ticked.map((i) => this.effective(check, i)),
+		);
 		this.applyToEditor(editor, plan.edits);
 		for (const id of plan.applied) {
 			const st = check.items.get(id);
@@ -677,6 +687,12 @@ export class GramspellView extends ItemView {
 		for (const c of this.allCards()) c.toggleClass('is-hover', c.getAttribute('data-id') === id);
 	}
 
+	/** The issue with the author's own fix in place of Claude's, when one was typed. */
+	private effective(check: NoteCheck, issue: Issue): Issue {
+		const custom = check.items.get(issue.id)?.custom;
+		return custom === null || custom === undefined ? issue : { ...issue, replacement: custom };
+	}
+
 	private allCards(): HTMLElement[] {
 		return this.body ? Array.from(this.body.querySelectorAll<HTMLElement>('.gramspell-card')) : [];
 	}
@@ -746,7 +762,7 @@ export class GramspellView extends ItemView {
 		const marks: MarkSpec[] = [];
 		for (const issue of check.issues) {
 			if (this.status(check, issue.id) !== 'open' || this.hidden.has(issue.kind)) continue;
-			const r = markRange(text, issue);
+			const r = markRange(text, this.effective(check, issue));
 			if (r) marks.push({ id: issue.id, kind: issue.kind, from: r.from, to: r.to });
 		}
 		setIssueMarks(editor, marks);
@@ -820,6 +836,16 @@ export class GramspellView extends ItemView {
 		this.renderedPath = this.path;
 		this.pending = [];
 		this.applyBtn = null;
+		// A re-render must not steal the cursor from an own-fix box being typed in.
+		const active = activeDocument.activeElement;
+		const typing =
+			active instanceof HTMLTextAreaElement && active.hasClass('gramspell-own-input')
+				? {
+						id: active.getAttribute('data-id'),
+						start: active.selectionStart,
+						end: active.selectionEnd,
+					}
+				: null;
 		scroller.empty();
 		scroller.addClass('gramspell-scroller');
 		const root = scroller.createDiv({ cls: 'gramspell' });
@@ -828,6 +854,15 @@ export class GramspellView extends ItemView {
 		if (prevHeight > 0) root.setCssProps({ '--gramspell-hold-height': `${prevHeight}px` });
 		const text = this.editor()?.getValue() ?? null;
 		this.build(root, text);
+		if (typing?.id) {
+			const box = root.querySelector<HTMLTextAreaElement>(
+				`.gramspell-own-input[data-id="${CSS.escape(typing.id)}"]`,
+			);
+			if (box) {
+				box.focus({ preventScroll: true });
+				box.setSelectionRange(typing.start, typing.end);
+			}
+		}
 		this.updateMarks(this.check(), text);
 		// Restoring the panel's own scroll position must not move the note.
 		this.ignorePanelUntil = Date.now() + 300;
@@ -953,7 +988,7 @@ export class GramspellView extends ItemView {
 			for (const h of handled) {
 				const row = det.createDiv({ cls: 'gramspell-handled-row' });
 				row.createSpan({ cls: 'gramspell-tag', text: status(h.id) });
-				row.createSpan({ text: ` ${h.quote} → ${h.replacement}` });
+				row.createSpan({ text: ` ${h.quote} → ${this.effective(check, h).replacement}` });
 			}
 		}
 
@@ -1066,21 +1101,24 @@ export class GramspellView extends ItemView {
 		btn.disabled = ticked === 0;
 	}
 
-	private renderDiff(parent: HTMLElement, issue: Issue): void {
-		const box = parent.createDiv({ cls: 'gramspell-diff', attr: { title: 'Jump to this text' } });
+	private renderDiff(parent: HTMLElement, issue: Issue, box?: HTMLElement): HTMLElement {
+		if (box) box.empty();
+		else box = parent.createDiv({ cls: 'gramspell-diff', attr: { title: 'Jump to this text' } });
+		box.removeClass('is-blocks');
 		// Quotes with math render as before/after Markdown so equations display.
 		const hasMath = /(^|[^\\])\$/.test(issue.quote);
 		if (hasMath) {
 			box.addClass('is-blocks');
 			this.md(box.createDiv({ cls: 'gramspell-before' }), issue.quote);
 			this.md(box.createDiv({ cls: 'gramspell-after' }), issue.replacement);
-			return;
+			return box;
 		}
 		for (const part of wordDiff(issue.quote, issue.replacement)) {
 			const cls =
 				part.op === 'eq' ? 'gramspell-eq' : part.op === 'del' ? 'gramspell-del' : 'gramspell-ins';
 			box.createSpan({ cls, text: part.text });
 		}
+		return box;
 	}
 
 	private renderCard(
@@ -1129,7 +1167,7 @@ export class GramspellView extends ItemView {
 			});
 		if (anchor) head.createSpan({ cls: 'gramspell-tag is-warn', text: anchor });
 
-		this.renderDiff(card, issue);
+		const diffBox = this.renderDiff(card, this.effective(check, issue));
 		if (issue.explanation) this.md(card.createDiv({ cls: 'gramspell-explain' }), issue.explanation);
 		if (issue.kind === 'fact' && issue.sourceUrl) {
 			const src = card.createDiv({ cls: 'gramspell-source' });
@@ -1140,6 +1178,59 @@ export class GramspellView extends ItemView {
 				attr: { target: '_blank', rel: 'noopener' },
 			});
 		}
+
+		// The author's own fix: overrides Claude's replacement for this card.
+		const own = card.createDiv({ cls: 'gramspell-own' });
+		const input = own.createEl('textarea', {
+			cls: 'gramspell-own-input',
+			attr: {
+				rows: '2',
+				placeholder: 'Your own fix: type the corrected text for the red/green passage…',
+				'data-id': issue.id,
+				'aria-label': 'Your own fix',
+			},
+		});
+		input.value = st.custom ?? '';
+		const ownNote = own.createDiv({ cls: 'gramspell-own-note' });
+		const showOwnNote = (): void => {
+			ownNote.empty();
+			if (st.custom === null) return;
+			ownNote.appendText(
+				st.custom === issue.quote ? 'Your fix leaves the text unchanged. ' : 'Using your fix. ',
+			);
+			const reset = ownNote.createEl('a', {
+				cls: 'gramspell-link',
+				text: "Use Claude's suggestion",
+			});
+			reset.addEventListener('click', () => {
+				st.custom = null;
+				input.value = '';
+				update();
+			});
+		};
+		const update = (): void => {
+			this.renderDiff(card, this.effective(check, issue), diffBox);
+			showOwnNote();
+			const cb = card.querySelector<HTMLInputElement>('.gramspell-tick input');
+			if (cb) cb.checked = st.checked;
+			this.updateApplyButton();
+		};
+		// Start from Claude's suggestion, all selected: type to replace it, or arrow keys to edit it.
+		input.addEventListener('focus', () => {
+			if (input.value !== '') return;
+			input.value = issue.replacement;
+			input.select();
+		});
+		input.addEventListener('input', () => {
+			const v = input.value;
+			st.custom = v === '' || v === issue.replacement ? null : v;
+			if (st.custom !== null) st.checked = true;
+			update();
+		});
+		input.addEventListener('blur', () => {
+			if (st.custom === null) input.value = '';
+		});
+		showOwnNote();
 
 		const actions = card.createDiv({ cls: 'gramspell-actions' });
 		const ignoreBtn = actions.createEl('button', { text: 'Ignore' });
