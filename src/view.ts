@@ -1216,11 +1216,13 @@ export class GramspellView extends ItemView {
 			this.updateApplyButton();
 		};
 		// Start from Claude's suggestion, all selected: type to replace it, or arrow keys to edit it.
-		input.addEventListener('focus', () => {
+		const prefill = (): void => {
 			if (input.value !== '') return;
 			input.value = issue.replacement;
 			input.select();
-		});
+		};
+		input.addEventListener('focus', prefill);
+		input.addEventListener('click', prefill);
 		input.addEventListener('input', () => {
 			const v = input.value;
 			st.custom = v === '' || v === issue.replacement ? null : v;
