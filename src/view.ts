@@ -334,6 +334,8 @@ export class GramspellView extends ItemView {
 		if (prev?.busy || prev?.scoring) return;
 		const s = this.plugin.settings;
 		const check = this.freshCheck(path);
+		// Scores are only made on demand (Score / Rescore), so a new check keeps the last ones.
+		if (prev?.scores) check.scores = prev.scores;
 		const key = this.apiKey();
 		if (!key) {
 			check.errors.push(
@@ -350,13 +352,7 @@ export class GramspellView extends ItemView {
 		}
 		const forbidden = parseForbidden(s.forbiddenWords);
 		const askForbidden = forbidden.filter((f) => f.replacement === null).map((f) => f.term);
-		if (
-			!s.checkSpelling &&
-			!s.checkGrammar &&
-			!s.checkFacts &&
-			!s.checkScores &&
-			forbidden.length === 0
-		) {
+		if (!s.checkSpelling && !s.checkGrammar && !s.checkFacts && forbidden.length === 0) {
 			check.errors.push('All checks are turned off in settings.');
 			this.render();
 			return;
@@ -434,11 +430,6 @@ export class GramspellView extends ItemView {
 				});
 			}
 		});
-		if (s.checkScores && chunks.length) {
-			check.scoring = true;
-			tasks.push(() => this.score(check, key, text));
-		}
-
 		check.busy = true;
 		check.total = tasks.length;
 		this.render();
@@ -451,7 +442,6 @@ export class GramspellView extends ItemView {
 			if (this.path === path) this.render();
 		});
 		check.busy = false;
-		check.scoring = false;
 		check.finished = true;
 		if (chunks.length === 0) check.errors.push('The note has no text to check.');
 		this.render();
@@ -491,9 +481,11 @@ export class GramspellView extends ItemView {
 		}
 	}
 
+	/** Score (or rescore) the note — the only way scores are made; checks never score. */
 	private async rescore(): Promise<void> {
-		const check = this.check();
-		if (!check || check.busy || check.scoring) return;
+		if (!this.path) return;
+		const check = this.check() ?? this.freshCheck(this.path);
+		if (check.busy || check.scoring) return;
 		const key = this.apiKey();
 		const text = await this.noteText();
 		if (!key || text === null) {
@@ -901,8 +893,11 @@ export class GramspellView extends ItemView {
 		runBtn.disabled = (check?.busy ?? false) || (check?.scoring ?? false);
 		runBtn.addEventListener('click', () => void this.runCheck());
 
-		if (!check) {
+		// No check run yet (a check may exist only to hold on-demand scores or a start-up error).
+		if (!check || (!check.finished && !check.busy)) {
 			root.createDiv({ cls: 'gramspell-empty', text: 'Not checked yet in this session.' });
+			for (const err of check?.errors ?? []) root.createDiv({ cls: 'gramspell-error', text: err });
+			if (this.plugin.settings.checkScores || check?.scores) this.renderScores(root, check);
 			return;
 		}
 		if (check.busy) {
@@ -1014,7 +1009,7 @@ export class GramspellView extends ItemView {
 		if (this.plugin.settings.checkScores || check.scores) this.renderScores(root, check);
 	}
 
-	private renderScores(root: HTMLElement, check: NoteCheck): void {
+	private renderScores(root: HTMLElement, check: NoteCheck | null): void {
 		const collapsed = this.plugin.settings.scoresCollapsed;
 		const strip = root.createDiv({ cls: `gramspell-scores${collapsed ? ' is-collapsed' : ''}` });
 		const head = strip.createDiv({ cls: 'gramspell-scores-head' });
@@ -1032,7 +1027,7 @@ export class GramspellView extends ItemView {
 			collapsed ? 'chevron-right' : 'chevron-down',
 		);
 		toggle.createEl('h4', { text: 'Scores' });
-		if (collapsed && check.scores) {
+		if (collapsed && check?.scores) {
 			const sc = check.scores;
 			toggle.createSpan({
 				cls: 'gramspell-scores-compact',
@@ -1052,14 +1047,26 @@ export class GramspellView extends ItemView {
 				void flip();
 			}
 		});
-		const btn = head.createEl('button', { text: check.scoring ? 'Scoring…' : 'Rescore' });
-		btn.disabled = check.scoring || check.busy;
+		const btn = head.createEl('button', {
+			text: check?.scoring ? 'Scoring…' : check?.scores ? 'Rescore' : 'Score',
+		});
+		btn.disabled = (check?.scoring ?? false) || (check?.busy ?? false);
 		btn.addEventListener('click', () => void this.rescore());
 		if (collapsed) return;
+		if (!check) {
+			strip.createDiv({
+				cls: 'gramspell-status',
+				text: 'Not scored yet. Press Score to score the note.',
+			});
+			return;
+		}
 		if (check.scoresError) strip.createDiv({ cls: 'gramspell-error', text: check.scoresError });
 		if (!check.scores) {
 			if (!check.scoring && !check.scoresError)
-				strip.createDiv({ cls: 'gramspell-status', text: 'Not scored yet.' });
+				strip.createDiv({
+					cls: 'gramspell-status',
+					text: 'Not scored yet. Press Score to score the note.',
+				});
 			else if (check.scoring)
 				strip.createDiv({ cls: 'gramspell-status', text: 'Claude is scoring the note…' });
 			return;

@@ -169,7 +169,7 @@ export class GramspellSettingTab extends PluginSettingTab {
 		);
 		toggle(
 			'Scores',
-			'Flow, clarity and reasoning scores (1–100).',
+			'Show the Flow, clarity and reasoning scores section (1–100). Scoring never runs with a check — only when you press Score / Rescore.',
 			() => s.checkScores,
 			(v) => (s.checkScores = v),
 		);
