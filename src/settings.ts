@@ -4,6 +4,17 @@ import type GramspellPlugin from './main';
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+/** Which check the pane's dropdown runs. */
+export type CheckMode = 'spelling' | 'grammar' | 'judgement' | 'facts' | 'all';
+
+export const CHECK_MODE_LABEL: Record<CheckMode, string> = {
+	spelling: 'Spelling',
+	grammar: 'Grammar',
+	judgement: 'Judgement calls',
+	facts: 'Facts',
+	all: 'All',
+};
+
 export interface GramspellSettings {
 	/** Name of the secret in Obsidian's SecretStorage that holds the API key (never the key itself). */
 	apiKeySecret: string;
@@ -11,7 +22,10 @@ export interface GramspellSettings {
 	effort: Effort;
 	checkSpelling: boolean;
 	checkGrammar: boolean;
+	checkJudgement: boolean;
 	checkFacts: boolean;
+	/** The check the pane's dropdown runs; remembered between sessions. */
+	checkMode: CheckMode;
 	checkScores: boolean;
 	variant: EnglishVariant;
 	dictionaryPath: string;
@@ -28,6 +42,7 @@ export interface GramspellSettings {
 	forbiddenWords: string[];
 	colorSpelling: string;
 	colorGrammar: string;
+	colorJudgement: string;
 	colorFact: string;
 	colorForbidden: string;
 	/** Ignored-issue fingerprints per note path. */
@@ -48,7 +63,9 @@ export const DEFAULT_SETTINGS: GramspellSettings = {
 	effort: 'medium',
 	checkSpelling: true,
 	checkGrammar: true,
+	checkJudgement: true,
 	checkFacts: true,
+	checkMode: 'all',
 	checkScores: true,
 	variant: 'en-US',
 	dictionaryPath: 'gramspell-check/Dictionary.md',
@@ -61,6 +78,7 @@ export const DEFAULT_SETTINGS: GramspellSettings = {
 	forbiddenWords: [],
 	colorSpelling: '#fff3a3',
 	colorGrammar: '#e03131',
+	colorJudgement: '#1c7ed6',
 	colorFact: '#800000',
 	colorForbidden: '#9c36b5',
 	ignored: {},
@@ -132,7 +150,12 @@ export class GramspellSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl).setName('Checks').setHeading();
+		new Setting(containerEl)
+			.setName('Checks')
+			.setDesc(
+				'Pick which check to run from the dropdown at the top of the pane. Each check is its own request. The switches below choose what runs when the dropdown is set to all.',
+			)
+			.setHeading();
 		const toggle = (
 			name: string,
 			desc: string,
@@ -157,9 +180,15 @@ export class GramspellSettingTab extends PluginSettingTab {
 		);
 		toggle(
 			'Grammar',
-			'Grammar and punctuation errors.',
+			'Clear-cut grammar errors: agreement, verb forms, articles, missing words, comma splices and the like.',
 			() => s.checkGrammar,
 			(v) => (s.checkGrammar = v),
+		);
+		toggle(
+			'Judgement calls',
+			'Changes a careful editor would usually make but writers may differ on: modifiers, parallelism, that/which, tense consistency, optional commas. Cards start unticked.',
+			() => s.checkJudgement,
+			(v) => (s.checkJudgement = v),
 		);
 		toggle(
 			'Facts',
@@ -253,7 +282,7 @@ export class GramspellSettingTab extends PluginSettingTab {
 		);
 		toggle(
 			'Group cards by kind',
-			'Show spelling, grammar, facts and forbidden words as separate lists. Off shows one list in note order, which lines up best with the note.',
+			'Show spelling, grammar, judgement calls, facts and forbidden words as separate lists. Off shows one list in note order, which lines up best with the note.',
 			() => s.groupByKind,
 			(v) => {
 				s.groupByKind = v;
@@ -288,6 +317,11 @@ export class GramspellSettingTab extends PluginSettingTab {
 			'Grammar underline',
 			() => s.colorGrammar,
 			(v) => (s.colorGrammar = v),
+		);
+		color(
+			'Judgement call underline',
+			() => s.colorJudgement,
+			(v) => (s.colorJudgement = v),
 		);
 		color(
 			'Fact underline',

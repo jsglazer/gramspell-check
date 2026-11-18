@@ -1,8 +1,14 @@
 /** Shared data shapes for the pure checking core. No obsidian / SDK imports. */
 
-export type IssueKind = 'spelling' | 'grammar' | 'fact' | 'forbidden';
+export type IssueKind = 'spelling' | 'grammar' | 'judgement' | 'fact' | 'forbidden';
 
-export const ISSUE_KINDS: readonly IssueKind[] = ['spelling', 'grammar', 'fact', 'forbidden'];
+export const ISSUE_KINDS: readonly IssueKind[] = [
+	'spelling',
+	'grammar',
+	'judgement',
+	'fact',
+	'forbidden',
+];
 
 export type Confidence = 'High' | 'Med';
 
@@ -15,7 +21,7 @@ export interface Issue {
 	/** The corrected version of `quote`. */
 	replacement: string;
 	explanation: string;
-	/** Grammar rule name, or the forbidden term (empty otherwise). */
+	/** Grammar or judgement-call rule name, or the forbidden term (empty otherwise). */
 	category: string;
 	/** Fact issues only; 'High' for the others. */
 	confidence: Confidence;

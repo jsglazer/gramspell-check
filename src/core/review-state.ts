@@ -30,11 +30,22 @@ export function assignIds(existing: Issue[], incoming: RawIssue[]): Issue[] {
 	const prefix: Record<IssueKind, string> = {
 		spelling: 's',
 		grammar: 'g',
+		judgement: 'j',
 		fact: 'f',
 		forbidden: 'w',
 	};
-	const count: Record<IssueKind, number> = { spelling: 0, grammar: 0, fact: 0, forbidden: 0 };
-	for (const e of existing) count[e.kind]++;
+	const count: Record<IssueKind, number> = {
+		spelling: 0,
+		grammar: 0,
+		judgement: 0,
+		fact: 0,
+		forbidden: 0,
+	};
+	// Continue from the highest number in use, so ids stay unique after cards are removed.
+	for (const e of existing) {
+		const n = Number(e.id.slice(prefix[e.kind].length));
+		if (Number.isFinite(n)) count[e.kind] = Math.max(count[e.kind], n);
+	}
 	const out: Issue[] = [];
 	for (const raw of incoming) {
 		if (raw.quote === raw.replacement || raw.quote.trim() === '') continue;

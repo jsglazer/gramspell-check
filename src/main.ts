@@ -15,12 +15,12 @@ export default class GramspellPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_GRAMSPELL, (leaf) => new GramspellView(leaf, this));
 		this.addRibbonIcon(
 			'spell-check',
-			'Check spelling, grammar & facts',
+			'Check note (check picked in the pane)',
 			() => void this.checkActiveNote(),
 		);
 		this.addCommand({
 			id: 'check-current-note',
-			name: 'Check spelling, grammar & facts',
+			name: 'Check note (check picked in the pane)',
 			checkCallback: (checking) => {
 				const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
 				if (!file) return false;
@@ -43,6 +43,7 @@ export default class GramspellPlugin extends Plugin {
 		document.body.setCssProps({
 			'--gramspell-spelling': '',
 			'--gramspell-grammar': '',
+			'--gramspell-judgement': '',
 			'--gramspell-fact': '',
 			'--gramspell-forbidden': '',
 		});
@@ -63,6 +64,7 @@ export default class GramspellPlugin extends Plugin {
 		document.body.setCssProps({
 			'--gramspell-spelling': s.colorSpelling,
 			'--gramspell-grammar': s.colorGrammar,
+			'--gramspell-judgement': s.colorJudgement,
 			'--gramspell-fact': s.colorFact,
 			'--gramspell-forbidden': s.colorForbidden,
 		});

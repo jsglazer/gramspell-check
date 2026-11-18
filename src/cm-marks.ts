@@ -27,6 +27,7 @@ const setHover = StateEffect.define<string | null>();
 const CLASS: Record<IssueKind, string> = {
 	spelling: 'gramspell-mark-spelling',
 	grammar: 'gramspell-mark-grammar',
+	judgement: 'gramspell-mark-judgement',
 	fact: 'gramspell-mark-fact',
 	forbidden: 'gramspell-mark-forbidden',
 };

@@ -25,9 +25,12 @@ export const CHECK_SYSTEM = `${SHARED_RULES}
 
 What to report:
 - spelling: misspelled words, including real-word errors that are wrong in context (their/there/they're, its/it's, affect/effect, form/from, loose/lose, than/then, principal/principle, complement/compliment), wrong or missing hyphens in compound words where a dictionary requires them, and incorrect capitalisation of proper nouns. Do NOT flag proper nouns, technical terms, product names, foreign words used deliberately, or words in the author's dictionary.
-- grammar: errors a careful human editor would fix, judged at sentence and paragraph level: subject-verb agreement (including across long intervening phrases and with collective or indefinite subjects), pronoun-antecedent agreement and pronoun case, ambiguous or dangling pronoun references only when they make the sentence wrong, tense consistency within a paragraph, comma splices and run-on sentences, sentence fragments that are not deliberate list items or headings, dangling and misplaced modifiers, faulty parallelism (especially in lists and paired constructions), who/whom, that/which (restrictive clauses), fewer/less, apostrophes and possessives, articles (a/an/the), doubled or missing words, wrong prepositions, wrong verb forms, and punctuation (commas after introductory clauses and around non-restrictive clauses, semicolons, colons, quotation marks and parentheses). Give a short rule name in "category" (e.g. "Subject-verb agreement", "Comma splice").
+- grammar: clear-cut errors a careful human editor would always fix: subject-verb agreement (including across long intervening phrases and with collective or indefinite subjects), pronoun-antecedent agreement and pronoun case, wrong verb forms, articles (a/an/the), doubled or missing words, apostrophes and possessives, wrong prepositions, who/whom, fewer/less, comma splices and run-on sentences, and sentence fragments that are not deliberate list items or headings. Give a short rule name in "category" (e.g. "Subject-verb agreement", "Comma splice").
+- judgement (judgement calls): places where a careful editor would usually change the text but reasonable writers may differ: ambiguous or dangling pronoun references, dangling and misplaced modifiers, faulty parallelism (especially in lists and paired constructions), tense consistency within a paragraph, that/which (restrictive clauses), commas after introductory clauses and around non-restrictive clauses, and the use of semicolons, colons, quotation marks and parentheses. Report one only when the change clearly makes the sentence more correct or less ambiguous; this is still not a licence for style, tone or concision rewrites. Give a short rule name in "category" (e.g. "Misplaced modifier", "Faulty parallelism").
 - forbidden (only when requested): every use of a word or phrase on the author's forbidden list (case-insensitive, any inflection, e.g. "utilize" also covers "utilized" and "utilizing"). "replacement" rewords the quote with the smallest change that avoids the forbidden term while keeping the meaning and grammar. "term" is the forbidden list entry that was used. Report every occurrence.
 - facts (only when requested): statements that are clearly and verifiably false: wrong dates, names, numbers, quantities, definitions, formulas, attributions, places or causal claims. Not opinions, predictions, judgement calls, simplifications that are acceptable in context, or claims you are unsure about. "replacement" corrects the statement with the smallest change. "confidence" is High when you are certain and Med when you are fairly sure; never report anything less certain.
+
+Report only the kinds listed under "Check for"; each request covers one narrow kind so the whole section can be read closely for it. Go through the text sentence by sentence and report every error of the requested kinds, not only the most obvious ones.
 
 Return JSON matching the schema. Use empty arrays when there is nothing to report.`;
 
@@ -57,6 +60,7 @@ export interface CheckOptions {
 	variant: EnglishVariant;
 	spelling: boolean;
 	grammar: boolean;
+	judgement: boolean;
 	facts: boolean;
 	/** Forbidden terms the model must find and reword (terms with a fixed replacement are handled locally). */
 	forbidden: string[];
@@ -94,6 +98,7 @@ export function buildCheckMessage(text: string, partial: boolean, opts: CheckOpt
 	const wanted = [
 		opts.spelling ? 'spelling' : null,
 		opts.grammar ? 'grammar' : null,
+		opts.judgement ? 'judgement' : null,
 		opts.facts ? 'facts' : null,
 		opts.forbidden.length ? 'forbidden' : null,
 	].filter(Boolean);

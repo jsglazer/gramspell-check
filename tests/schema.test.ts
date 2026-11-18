@@ -7,6 +7,31 @@ import {
 	parseScores,
 } from '../src/core/schema';
 
+describe('judgement calls', () => {
+	it('have their own schema key with a category and parse to the judgement kind', () => {
+		const sch = checkSchema(['judgement']) as { required: string[] };
+		expect(sch.required).toEqual(['judgement']);
+		const r = parseCheck(
+			JSON.stringify({
+				judgement: [
+					{
+						quote: 'Walking home, the rain fell',
+						replacement: 'Walking home, I got caught in the rain',
+						category: 'Dangling modifier',
+						explanation: 'The rain was not walking home.',
+					},
+				],
+			}),
+			['judgement'],
+		);
+		expect(r.ok).toBe(true);
+		if (r.ok) {
+			expect(r.value[0].kind).toBe('judgement');
+			expect(r.value[0].category).toBe('Dangling modifier');
+		}
+	});
+});
+
 describe('checkSchema', () => {
 	it('includes only the requested keys', () => {
 		const s = checkSchema(['spelling', 'grammar']) as {

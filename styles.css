@@ -3,6 +3,7 @@
 body {
 	--gramspell-spelling-default: #fff3a3;
 	--gramspell-grammar-default: #e03131;
+	--gramspell-judgement-default: #1c7ed6;
 	--gramspell-fact-default: #800000;
 	--gramspell-forbidden-default: #9c36b5;
 }
@@ -29,6 +30,14 @@ body {
 	text-decoration-style: wavy;
 	text-decoration-color: var(--gramspell-grammar, var(--gramspell-grammar-default));
 	text-decoration-thickness: 1.5px;
+	text-decoration-skip-ink: none;
+	text-underline-offset: 3px;
+}
+.gramspell-mark-judgement {
+	text-decoration-line: underline;
+	text-decoration-style: dotted;
+	text-decoration-color: var(--gramspell-judgement, var(--gramspell-judgement-default));
+	text-decoration-thickness: 2px;
 	text-decoration-skip-ink: none;
 	text-underline-offset: 3px;
 }
@@ -93,6 +102,12 @@ body {
 	justify-content: space-between;
 	gap: var(--size-4-2);
 }
+.gramspell-run {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	flex-shrink: 0;
+}
 .gramspell-title {
 	font-weight: var(--font-semibold);
 	font-size: 1.1em;
@@ -127,6 +142,9 @@ body {
 }
 .gramspell-chip-grammar {
 	box-shadow: inset 0.35em 0 0 var(--gramspell-grammar, var(--gramspell-grammar-default));
+}
+.gramspell-chip-judgement {
+	box-shadow: inset 0.35em 0 0 var(--gramspell-judgement, var(--gramspell-judgement-default));
 }
 .gramspell-chip-fact {
 	box-shadow: inset 0.35em 0 0 var(--gramspell-fact, var(--gramspell-fact-default));
@@ -166,6 +184,9 @@ body {
 }
 .gramspell-card-grammar {
 	border-left-color: var(--gramspell-grammar, var(--gramspell-grammar-default));
+}
+.gramspell-card-judgement {
+	border-left-color: var(--gramspell-judgement, var(--gramspell-judgement-default));
 }
 .gramspell-card-fact {
 	border-left-color: var(--gramspell-fact, var(--gramspell-fact-default));

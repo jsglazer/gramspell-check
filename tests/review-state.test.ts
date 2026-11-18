@@ -45,6 +45,15 @@ describe('assignIds', () => {
 		]);
 		expect(second.map((i) => i.id)).toEqual(['s2']);
 	});
+	it('continues from the highest id after cards are removed, and numbers judgement calls j1…', () => {
+		const all = assignIds(
+			[],
+			[raw('spelling', 'a', 'b'), raw('spelling', 'c', 'd'), raw('spelling', 'e', 'f')],
+		);
+		const kept = all.filter((i) => i.id === 's3');
+		const next = assignIds(kept, [raw('spelling', 'g', 'h'), raw('judgement', 'i', 'j')]);
+		expect(next.map((i) => i.id)).toEqual(['s4', 'j1']);
+	});
 	it('fingerprints are whitespace-insensitive and include the kind', () => {
 		expect(fingerprint(raw('grammar', 'a  b', 'c'))).toBe(fingerprint(raw('grammar', 'a b', 'c')));
 		expect(fingerprint(raw('grammar', 'a', 'b'))).not.toBe(fingerprint(raw('spelling', 'a', 'b')));

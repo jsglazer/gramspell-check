@@ -20,6 +20,12 @@ const ITEM_SCHEMAS = {
 		required: ['quote', 'replacement', 'category', 'explanation'],
 		properties: { ...BASE_ITEM, category: { type: 'string' } },
 	},
+	judgement: {
+		type: 'object',
+		additionalProperties: false,
+		required: ['quote', 'replacement', 'category', 'explanation'],
+		properties: { ...BASE_ITEM, category: { type: 'string' } },
+	},
 	forbidden: {
 		type: 'object',
 		additionalProperties: false,
@@ -34,11 +40,12 @@ const ITEM_SCHEMAS = {
 	},
 } as const;
 
-export type CheckKey = 'spelling' | 'grammar' | 'facts' | 'forbidden';
+export type CheckKey = 'spelling' | 'grammar' | 'judgement' | 'facts' | 'forbidden';
 
 const KEY_KIND: Record<CheckKey, IssueKind> = {
 	spelling: 'spelling',
 	grammar: 'grammar',
+	judgement: 'judgement',
 	facts: 'fact',
 	forbidden: 'forbidden',
 };
@@ -103,7 +110,7 @@ function parseItems(data: Obj, key: CheckKey, withSource: boolean): RawIssue[] {
 			replacement: str(item, 'replacement', where),
 			explanation: str(item, 'explanation', where),
 			category:
-				key === 'grammar'
+				key === 'grammar' || key === 'judgement'
 					? str(item, 'category', where)
 					: key === 'forbidden'
 						? str(item, 'term', where)

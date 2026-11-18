@@ -66,6 +66,7 @@ import {
 } from './core/schema';
 import type { Issue, IssueKind, RawIssue, Scores } from './core/types';
 import type GramspellPlugin from './main';
+import { CHECK_MODE_LABEL, type CheckMode } from './settings';
 
 export const VIEW_TYPE_GRAMSPELL = 'gramspell-check-view';
 
@@ -88,6 +89,8 @@ export interface NoteCheck {
 	busy: boolean;
 	/** True once a check has run to completion. */
 	finished: boolean;
+	/** Checks that have run on this note this session (re-running one replaces only its own open cards). */
+	covered: Set<Exclude<CheckMode, 'all'>>;
 	done: number;
 	total: number;
 	errors: string[];
@@ -98,6 +101,7 @@ export interface NoteCheck {
 const KIND_TITLE: Record<IssueKind, string> = {
 	spelling: 'Spelling',
 	grammar: 'Grammar',
+	judgement: 'Judgement',
 	fact: 'Facts',
 	forbidden: 'Forbidden',
 };
@@ -106,11 +110,31 @@ const KIND_TITLE: Record<IssueKind, string> = {
 const KIND_LABEL: Record<IssueKind, string> = {
 	spelling: 'Spelling',
 	grammar: 'Grammar',
+	judgement: 'Judgement call',
 	fact: 'Fact',
 	forbidden: 'Forbidden',
 };
 
-const KIND_ORDER: IssueKind[] = ['spelling', 'grammar', 'fact', 'forbidden'];
+const KIND_ORDER: IssueKind[] = ['spelling', 'grammar', 'judgement', 'fact', 'forbidden'];
+
+type SingleMode = Exclude<CheckMode, 'all'>;
+const SINGLE_MODES: SingleMode[] = ['spelling', 'grammar', 'judgement', 'facts'];
+
+/** Card kinds each check produces (forbidden words ride along with spelling). */
+const MODE_KINDS: Record<SingleMode, IssueKind[]> = {
+	spelling: ['spelling', 'forbidden'],
+	grammar: ['grammar'],
+	judgement: ['judgement'],
+	facts: ['fact'],
+};
+
+/** Request label prefix per check, for Token use. */
+const MODE_LABEL: Record<SingleMode, string> = {
+	spelling: 'Spelling',
+	grammar: 'Grammar',
+	judgement: 'Judgement',
+	facts: 'Facts',
+};
 
 /** Max requests in flight during one check. */
 const CONCURRENCY = 3;
@@ -302,6 +326,7 @@ export class GramspellView extends ItemView {
 			scoring: false,
 			busy: false,
 			finished: false,
+			covered: new Set(),
 			done: 0,
 			total: 0,
 			errors: [],
@@ -327,15 +352,33 @@ export class GramspellView extends ItemView {
 
 	// ---- checking ----------------------------------------------------------
 
-	async runCheck(): Promise<void> {
+	/** The single checks "All" runs, per the settings switches. */
+	private allModes(): SingleMode[] {
+		const s = this.plugin.settings;
+		const on: Record<SingleMode, boolean> = {
+			spelling: s.checkSpelling || parseForbidden(s.forbiddenWords).length > 0,
+			grammar: s.checkGrammar,
+			judgement: s.checkJudgement,
+			facts: s.checkFacts,
+		};
+		return SINGLE_MODES.filter((m) => on[m]);
+	}
+
+	private modesFor(mode: CheckMode): SingleMode[] {
+		return mode === 'all' ? this.allModes() : [mode];
+	}
+
+	/** Run the check picked in the dropdown (or `mode`). Cards from other checks are kept. */
+	async runCheck(mode: CheckMode = this.plugin.settings.checkMode): Promise<void> {
 		if (!this.path) return;
 		const path = this.path;
 		const prev = this.plugin.checks.get(path);
 		if (prev?.busy || prev?.scoring) return;
 		const s = this.plugin.settings;
-		const check = this.freshCheck(path);
-		// Scores are only made on demand (Score / Rescore), so a new check keeps the last ones.
-		if (prev?.scores) check.scores = prev.scores;
+		const check = prev ?? this.freshCheck(path);
+		check.errors = [];
+		check.usage = [];
+		check.stamped = null;
 		const key = this.apiKey();
 		if (!key) {
 			check.errors.push(
@@ -350,31 +393,29 @@ export class GramspellView extends ItemView {
 			this.render();
 			return;
 		}
-		const forbidden = parseForbidden(s.forbiddenWords);
-		const askForbidden = forbidden.filter((f) => f.replacement === null).map((f) => f.term);
-		if (!s.checkSpelling && !s.checkGrammar && !s.checkFacts && forbidden.length === 0) {
+		const modes = this.modesFor(mode);
+		if (modes.length === 0) {
 			check.errors.push('All checks are turned off in settings.');
 			this.render();
 			return;
 		}
 
+		// Re-running a check replaces its own open cards; handled cards and other checks' cards stay.
+		const clearKinds = new Set(modes.flatMap((m) => MODE_KINDS[m]));
+		const drop = check.issues.filter(
+			(i) => clearKinds.has(i.kind) && this.status(check, i.id) === 'open',
+		);
+		for (const i of drop) check.items.delete(i.id);
+		check.issues = check.issues.filter((i) => !drop.includes(i));
+
+		const forbidden = parseForbidden(s.forbiddenWords);
+		const askForbidden = forbidden.filter((f) => f.replacement === null).map((f) => f.term);
 		const dict = await this.dictionary();
 		const ignored = new Set(s.ignored[path] ?? []);
 		const chunks = chunkNote(text);
 		const partial = chunks.length > 1;
-		const factsInline = s.checkFacts && !s.webSearch;
-		const keys: CheckKey[] = [
-			...(s.checkSpelling ? (['spelling'] as const) : []),
-			...(s.checkGrammar ? (['grammar'] as const) : []),
-			...(factsInline ? (['facts'] as const) : []),
-			...(askForbidden.length ? (['forbidden'] as const) : []),
-		];
-		const opts: CheckOptions = {
+		const shared = {
 			variant: s.variant,
-			spelling: s.checkSpelling,
-			grammar: s.checkGrammar,
-			facts: factsInline,
-			forbidden: askForbidden,
 			dictionary: [...dict].sort(),
 			ignored: this.ignoredForPrompt(path),
 		};
@@ -386,51 +427,77 @@ export class GramspellView extends ItemView {
 				check.issues.push(issue);
 				check.items.set(issue.id, {
 					status: 'open',
-					checked: true,
+					// Judgement calls are opinions: the author ticks the ones they want.
+					checked: issue.kind !== 'judgement',
 					message: null,
 					custom: null,
 				});
 			}
 		};
 
+		/** Model keys for one check; spelling also carries the forbidden terms Claude must reword. */
+		const keysFor = (m: SingleMode): CheckKey[] => {
+			if (m === 'spelling') {
+				const wantSpelling = mode !== 'all' || s.checkSpelling;
+				return [
+					...(wantSpelling ? (['spelling'] as const) : []),
+					...(askForbidden.length ? (['forbidden'] as const) : []),
+				];
+			}
+			if (m === 'facts') return s.webSearch ? [] : ['facts'];
+			return [m];
+		};
+
 		// Forbidden terms with a fixed replacement are found locally, before any request.
-		addIssues(findForbidden(text, forbidden));
+		if (modes.includes('spelling')) addIssues(findForbidden(text, forbidden));
 
 		const tasks: Array<() => Promise<void>> = [];
 		const label = (i: number): string => (partial ? ` (part ${i + 1}/${chunks.length})` : '');
 		chunks.forEach((chunk, i) => {
-			if (keys.length) {
-				tasks.push(async () => {
-					const res = await callClaude({
-						...base,
-						system: CHECK_SYSTEM,
-						user: buildCheckMessage(chunk.text, partial, opts),
-						schema: checkSchema(keys),
+			for (const m of modes) {
+				const keys = keysFor(m);
+				if (keys.length) {
+					const opts: CheckOptions = {
+						...shared,
+						spelling: keys.includes('spelling'),
+						grammar: keys.includes('grammar'),
+						judgement: keys.includes('judgement'),
+						facts: keys.includes('facts'),
+						forbidden: keys.includes('forbidden') ? askForbidden : [],
+					};
+					tasks.push(async () => {
+						const res = await callClaude({
+							...base,
+							system: CHECK_SYSTEM,
+							user: buildCheckMessage(chunk.text, partial, opts),
+							schema: checkSchema(keys),
+						});
+						this.recordUsage(check, `${MODE_LABEL[m]}${label(i)}`, res);
+						const parsed = parseCheck(res.text, keys);
+						if (!parsed.ok) throw new Error(`Claude's answer could not be read: ${parsed.error}`);
+						addIssues(parsed.value);
 					});
-					this.recordUsage(check, `Check${label(i)}`, res);
-					const parsed = parseCheck(res.text, keys);
-					if (!parsed.ok) throw new Error(`Claude's answer could not be read: ${parsed.error}`);
-					addIssues(parsed.value);
-				});
-			}
-			if (s.checkFacts && s.webSearch) {
-				tasks.push(async () => {
-					const res = await callClaude({
-						...base,
-						system: FACT_SYSTEM,
-						user: buildFactMessage(chunk.text, partial, opts),
-						schema: null,
-						webSearch: { maxUses: 5, blockedDomains: s.blockedDomains },
+				} else if (m === 'facts') {
+					tasks.push(async () => {
+						const res = await callClaude({
+							...base,
+							system: FACT_SYSTEM,
+							user: buildFactMessage(chunk.text, partial, shared),
+							schema: null,
+							webSearch: { maxUses: 5, blockedDomains: s.blockedDomains },
+						});
+						this.recordUsage(check, `Facts${label(i)}`, res);
+						const parsed = parseFactAnswer(res.text);
+						if (!parsed.ok)
+							throw new Error(`The fact-check answer could not be read: ${parsed.error}`);
+						addIssues(parsed.value);
 					});
-					this.recordUsage(check, `Facts${label(i)}`, res);
-					const parsed = parseFactAnswer(res.text);
-					if (!parsed.ok)
-						throw new Error(`The fact-check answer could not be read: ${parsed.error}`);
-					addIssues(parsed.value);
-				});
+				}
 			}
 		});
 		check.busy = true;
+		check.finished = false;
+		check.done = 0;
 		check.total = tasks.length;
 		this.render();
 		await runPool(tasks, CONCURRENCY, (_i, result) => {
@@ -444,6 +511,7 @@ export class GramspellView extends ItemView {
 		check.busy = false;
 		check.finished = true;
 		if (chunks.length === 0) check.errors.push('The note has no text to check.');
+		else if (check.errors.length === 0) for (const m of modes) check.covered.add(m);
 		this.render();
 		await this.maybeAutoStamp(check);
 	}
@@ -621,6 +689,8 @@ export class GramspellView extends ItemView {
 			this.plugin.settings.autoStamp &&
 			check.finished &&
 			!check.busy &&
+			// Only once every check "All" runs has been done on this note.
+			this.allModes().every((m) => check.covered.has(m)) &&
 			!check.stamped &&
 			check.errors.length === 0 &&
 			nothingOpen(check.issues, (id) => this.status(check, id))
@@ -873,7 +943,7 @@ export class GramspellView extends ItemView {
 		if (!this.path) {
 			root.createDiv({
 				cls: 'gramspell-empty',
-				text: 'Open a note, then run "Check spelling, grammar & facts".',
+				text: 'Open a note, pick a check and press Check.',
 			});
 			return;
 		}
@@ -882,15 +952,32 @@ export class GramspellView extends ItemView {
 
 		const header = root.createDiv({ cls: 'gramspell-header' });
 		header.createDiv({ cls: 'gramspell-title', text: name.replace(/\.md$/, '') });
-		const runBtn = header.createEl('button', {
+		const run = header.createDiv({ cls: 'gramspell-run' });
+		const s = this.plugin.settings;
+		const busy = (check?.busy ?? false) || (check?.scoring ?? false);
+		const picker = run.createEl('select', {
+			cls: 'dropdown gramspell-mode',
+			attr: { 'aria-label': 'Check to run' },
+		});
+		for (const [id, label] of Object.entries(CHECK_MODE_LABEL))
+			picker.createEl('option', { value: id, text: label });
+		picker.value = s.checkMode;
+		picker.disabled = busy;
+		picker.addEventListener('change', () => {
+			s.checkMode = picker.value as CheckMode;
+			void this.plugin.saveSettings();
+			this.render();
+		});
+		const ran = this.modesFor(s.checkMode);
+		const runBtn = run.createEl('button', {
 			cls: 'mod-cta',
 			text: check?.busy
 				? `Checking ${check.done}/${check.total}…`
-				: check?.finished
+				: ran.length && ran.every((m) => check?.covered.has(m))
 					? 'Check again'
-					: 'Check note',
+					: 'Check',
 		});
-		runBtn.disabled = (check?.busy ?? false) || (check?.scoring ?? false);
+		runBtn.disabled = busy;
 		runBtn.addEventListener('click', () => void this.runCheck());
 
 		// No check run yet (a check may exist only to hold on-demand scores or a start-up error).
