@@ -1,5 +1,13 @@
 # Gramspell Check
 
+[![GitHub release](https://img.shields.io/github/v/release/jsglazer/gramspell-check?logo=github)](https://github.com/jsglazer/gramspell-check/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jsglazer/gramspell-check/blob/main/LICENSE)
+[![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97756?logo=anthropic)](https://claude.ai)
+[![Gemini Flash Antigravity](https://img.shields.io/badge/Gemini%20Flash-Antigravity-4f86f7?logo=google-gemini&logoColor=white)](https://github.com/google-gemini)
+[![CI](https://github.com/jsglazer/gramspell-check/actions/workflows/ci.yml/badge.svg)](https://github.com/jsglazer/gramspell-check/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/jsglazer/gramspell-check/actions/workflows/codeql.yml/badge.svg)](https://github.com/jsglazer/gramspell-check/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jsglazer/gramspell-check/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jsglazer/gramspell-check)
+
 An Obsidian plugin that checks a note for spelling, grammar and factual errors with Claude. Problems are marked in the note, the proposed fixes are listed with diffs in a right-sidebar pane, and the pane can also score the writing's flow, clarity and reasoning when you ask. Works on desktop and iOS.
 
 ## What it does
