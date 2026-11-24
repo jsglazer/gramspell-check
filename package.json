@@ -1,6 +1,6 @@
 {
 	"name": "gramspell-check",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "Spelling, grammar and fact checking with Claude in an Obsidian sidebar pane",
 	"main": "main.js",
 	"scripts": {
@@ -12,7 +12,13 @@
 		"format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
 		"test": "vitest run"
 	},
-	"keywords": ["obsidian", "claude", "grammar", "spelling", "fact-check"],
+	"keywords": [
+		"obsidian",
+		"claude",
+		"grammar",
+		"spelling",
+		"fact-check"
+	],
 	"author": "Josh Glazer",
 	"license": "MIT",
 	"devDependencies": {
